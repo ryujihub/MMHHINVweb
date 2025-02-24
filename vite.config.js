@@ -5,11 +5,21 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
-    port: 5173
+    port: 3000,
+    host: true
   },
   resolve: {
     alias: {
       '@': '/src'
     }
+  },
+  optimizeDeps: {
+    include: [
+      'firebase/app',
+      'firebase/auth',
+      'firebase/firestore',
+      'date-fns',
+      'vue-toastification'
+    ]
   }
 }) 
