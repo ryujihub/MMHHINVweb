@@ -30,32 +30,29 @@
     <div class="sidebar" :class="{ 'sidebar-collapsed': isSidebarCollapsed }">
       <div class="sidebar-header">
         <i class="fas fa-warehouse"></i>
-        <span v-if="!isSidebarCollapsed">MMH Hardware</span>
-        <button @click="toggleSidebar" class="collapse-btn">
-          <i :class="isSidebarCollapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left'"></i>
-        </button>
+        <span>MMH Hardware</span>
       </div>
       
       <div class="sidebar-menu">
         <a href="#" class="menu-item" :class="{ active: currentView === 'dashboard' }" @click="setView('dashboard')">
           <i class="fas fa-tachometer-alt"></i>
-          <span v-if="!isSidebarCollapsed">Dashboard</span>
+          <span class="menu-label">Dashboard</span>
         </a>
         <a href="#" class="menu-item" :class="{ active: currentView === 'inventory' }" @click="setView('inventory')">
           <i class="fas fa-boxes"></i>
-          <span v-if="!isSidebarCollapsed">Inventory</span>
+          <span class="menu-label">Inventory</span>
         </a>
         <a href="#" class="menu-item" :class="{ active: currentView === 'categories' }" @click="setView('categories')">
           <i class="fas fa-tags"></i>
-          <span v-if="!isSidebarCollapsed">Categories</span>
+          <span class="menu-label">Categories</span>
         </a>
         <a href="#" class="menu-item" :class="{ active: currentView === 'reports' }" @click="setView('reports')">
           <i class="fas fa-chart-bar"></i>
-          <span v-if="!isSidebarCollapsed">Reports</span>
+          <span class="menu-label">Reports</span>
         </a>
         <a href="#" class="menu-item" :class="{ active: currentView === 'settings' }" @click="setView('settings')">
           <i class="fas fa-cog"></i>
-          <span v-if="!isSidebarCollapsed">Settings</span>
+          <span class="menu-label">Settings</span>
         </a>
       </div>
     </div>
@@ -105,6 +102,11 @@
                 <h4>Most Stocked Category</h4>
                 <p>{{ getMostStockedCategory }}</p>
               </div>
+              <div class="summary-card losses">
+                <h4>Total Losses</h4>
+                <p>₱{{ formatPrice(getTotalLosses) }}</p>
+                <small>Based on missing inventory</small>
+              </div>
             </div>
           </div>
         </div>
@@ -148,6 +150,22 @@
                       type="number" 
                       step="0.01" 
                       placeholder="Enter price in peso"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label>Total Stock Quantity</label>
+                    <input 
+                      v-model.number="newItem.totalStock" 
+                      type="number" 
+                      placeholder="Enter total stock"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label>Usage</label>
+                    <input 
+                      v-model.number="newItem.usage" 
+                      type="number" 
+                      placeholder="Enter usage"
                     />
                   </div>
                   <button @click="addItem" class="add-btn">
@@ -201,6 +219,52 @@
                           step="0.01"
                           min="0"
                         />
+                      </div>
+                    </div>
+                    <div class="stock-status">
+                      <div class="stock-info">
+                        <span class="stock-label">Total Stock:</span>
+                        <input 
+                          type="number" 
+                          v-model.number="item.totalStock" 
+                          @change="updateTotalStock(item.id, item.totalStock)"
+                          class="total-stock-input"
+                        />
+                      </div>
+                      <div class="usage-info">
+                        <span class="stock-label">Usage:</span>
+                        <input 
+                          type="number" 
+                          v-model.number="item.usage" 
+                          @change="updateUsage(item.id, item.usage)"
+                          class="usage-input"
+                          placeholder="Enter usage"
+                        />
+                      </div>
+                      <div class="variance-info" :class="getVarianceClass(item)">
+                        <div class="variance-details">
+                          <span class="variance-label">Variance:</span>
+                          <span class="variance-value">
+                            {{ calculateVariance(item) }} {{ item.unit }}
+                            ({{ calculateVariancePercentage(item) }}%)
+                          </span>
+                        </div>
+                        <div class="variance-explanation">
+                          {{ getVarianceExplanation(item) }}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="losses-info" v-if="getItemLosses(item) > 0">
+                      <div class="losses-details">
+                        <span class="losses-label">
+                          <i class="fas fa-exclamation-triangle"></i> Losses:
+                        </span>
+                        <span class="losses-value">
+                          ₱{{ formatPrice(getItemLosses(item)) }}
+                        </span>
+                      </div>
+                      <div class="losses-explanation">
+                        Based on {{ Math.abs(calculateVariance(item)) }} missing units
                       </div>
                     </div>
                     <div class="item-meta">
@@ -312,7 +376,8 @@ import {
   deleteDoc,
   doc,
   query,
-  where 
+  where,
+  getDoc
 } from 'firebase/firestore'
 
 export default {
@@ -342,7 +407,9 @@ export default {
       quantity: 0,
       unit: '',
       price: 0,
-      category: 'electrical'
+      totalStock: 0,
+      category: 'electrical',
+      usage: 0,
     })
 
     const isLoading = ref(false)
@@ -406,21 +473,30 @@ export default {
           ...newItem.value,
           category: selectedCategory.value,
           createdAt: new Date(),
-          userId: user.value.uid
+          lastUpdated: new Date(),
+          userId: user.value.uid,
+          usage: newItem.value.usage || 0,
+          totalStock: newItem.value.totalStock || newItem.value.quantity
         }
+        
         await addDoc(collection(db, 'inventory'), itemData)
         await loadItems()
+        
+        // Reset form
         newItem.value = {
           name: '',
           quantity: 0,
           unit: '',
           price: 0,
+          totalStock: 0,
+          usage: 0,
           category: selectedCategory.value
         }
+        
         toast.success('Item added successfully')
       } catch (error) {
         console.error('Error adding item:', error)
-        toast.error('Failed to add item. Please try again.')
+        toast.error('Failed to add item: ' + error.message)
       }
     }
 
@@ -661,14 +737,9 @@ export default {
     }
 
     // Add these refs
-    const isSidebarCollapsed = ref(false)
     const currentView = ref('dashboard')
 
     // Add these methods
-    const toggleSidebar = () => {
-      isSidebarCollapsed.value = !isSidebarCollapsed.value
-    }
-
     const setView = (view) => {
       currentView.value = view
     }
@@ -705,6 +776,205 @@ export default {
         .reduce((total, item) => total + (item.price * item.quantity), 0)
     }
 
+    const updateTotalStock = async (itemId, newTotalStock) => {
+      try {
+        const itemRef = doc(db, 'inventory', itemId)
+        await updateDoc(itemRef, {
+          totalStock: newTotalStock,
+          lastUpdated: new Date()
+        })
+        await loadItems()
+        toast.success('Total stock updated')
+      } catch (error) {
+        console.error('Error updating total stock:', error)
+        toast.error('Failed to update total stock')
+      }
+    }
+
+    const getStockDiscrepancy = (item) => {
+      const missing = item.totalStock - item.quantity
+      return missing > 0 ? missing : 0
+    }
+
+    const getTotalLosses = computed(() => {
+      return items.value.reduce((total, item) => {
+        const variance = calculateVariance(item)
+        // Only count negative variances (missing items) as losses
+        if (variance < 0) {
+          return total + (Math.abs(variance) * item.price)
+        }
+        return total
+      }, 0)
+    })
+
+    const updateUsage = async (itemId, newUsage, oldUsage = 0) => {
+      try {
+        // First get the current item data
+        const itemRef = doc(db, 'inventory', itemId)
+        const itemDoc = await getDoc(itemRef)
+        
+        if (!itemDoc.exists()) {
+          toast.error('Item not found')
+          return
+        }
+
+        const item = { id: itemDoc.id, ...itemDoc.data() }
+        
+        // Validate the new usage value
+        if (newUsage < 0) {
+          toast.error('Usage cannot be negative')
+          return
+        }
+
+        // Update the item with new usage
+        const updateData = {
+          usage: newUsage || 0,
+          lastUpdated: new Date()
+        }
+
+        await updateDoc(itemRef, updateData)
+
+        // Calculate variance after update
+        const expectedStock = item.totalStock - newUsage
+        const actualStock = item.quantity
+        const variance = actualStock - expectedStock
+
+        // Show alerts if needed
+        if (Math.abs(variance) >= auditThreshold.value) {
+          toast.warning(`
+            Stock Variance Alert:
+            ${item.name}
+            Expected: ${expectedStock} ${item.unit}
+            Actual: ${actualStock} ${item.unit}
+            Difference: ${variance} ${item.unit}
+          `, { timeout: 5000 })
+        }
+
+        await loadItems()
+        toast.success('Usage updated')
+      } catch (error) {
+        console.error('Error updating usage:', error)
+        toast.error('Failed to update usage: ' + error.message)
+      }
+    }
+
+    const triggerAudit = (item) => {
+      // Show audit dialog
+      const auditMessage = `
+        Audit Required for ${item.name}
+        Current Quantity: ${item.quantity} ${item.unit}
+        Expected Quantity: ${item.totalStock - item.usage} ${item.unit}
+        Variance: ${calculateVariance(item)} ${item.unit}
+        
+        Would you like to:
+        1. Adjust inventory level
+        2. Review usage records
+        3. Schedule physical count
+      `
+      
+      // You can implement a modal dialog here
+      console.log(auditMessage)
+      toast.info('Audit feature coming soon!')
+    }
+
+    const suggestRestock = (item) => {
+      const suggestedAmount = item.totalStock - item.quantity
+      const restockMessage = `
+        Restock Suggestion for ${item.name}
+        Current Stock: ${item.quantity} ${item.unit}
+        Suggested Order: ${suggestedAmount} ${item.unit}
+        
+        Would you like to:
+        1. Place order now
+        2. Review usage history
+        3. Adjust restock level
+      `
+      
+      // You can implement a modal dialog here
+      console.log(restockMessage)
+      toast.info('Restock feature coming soon!')
+    }
+
+    const calculateVariance = (item) => {
+      // Only calculate if we have all required values
+      if (!item.totalStock || !item.quantity || !item.usage) {
+        return 0
+      }
+      const expectedStock = item.totalStock - (item.usage || 0)
+      const actualStock = item.quantity
+      return actualStock - expectedStock
+    }
+
+    const calculateVariancePercentage = (item) => {
+      const variance = calculateVariance(item)
+      const expectedStock = item.totalStock - item.usage
+      if (expectedStock === 0) return 0
+      return ((variance / expectedStock) * 100).toFixed(1)
+    }
+
+    const getVarianceClass = (item) => {
+      const variance = calculateVariance(item)
+      if (variance < 0) return 'negative-variance'
+      if (variance > 0) return 'positive-variance'
+      return 'no-variance'
+    }
+
+    const getVarianceExplanation = (item) => {
+      // Only show explanation if we have all required values
+      if (!item.totalStock || !item.quantity || !item.usage) {
+        return 'Set total stock and usage to track variance'
+      }
+      
+      const variance = calculateVariance(item)
+      const expected = item.totalStock - (item.usage || 0)
+      
+      if (variance === 0) return 'Stock matches expected quantity'
+      if (variance < 0) {
+        return `Missing ${Math.abs(variance)} ${item.unit} (Expected: ${expected}, Actual: ${item.quantity})`
+      }
+      return `Excess ${variance} ${item.unit} (Expected: ${expected}, Actual: ${item.quantity})`
+    }
+
+    // Add new refs for tracking
+    const stockThreshold = ref(10) // Minimum stock level before restock alert
+    const auditThreshold = ref(5) // Units difference before suggesting audit
+
+    // Add these computed properties
+    const getInventoryStatus = computed(() => {
+      return items.value.map(item => {
+        const variance = calculateVariance(item)
+        const variancePercent = calculateVariancePercentage(item)
+        const needsRestock = item.quantity <= stockThreshold.value
+        const needsAudit = Math.abs(variance) >= auditThreshold.value
+
+    return {
+          ...item,
+          variance,
+          variancePercent,
+          needsRestock,
+          needsAudit,
+          status: getItemStatus(item)
+        }
+      })
+    })
+
+    // Add these methods
+    const getItemStatus = (item) => {
+      const variance = calculateVariance(item)
+      if (variance < 0) return 'missing'
+      if (variance > 0) return 'excess'
+      if (item.quantity <= stockThreshold.value) return 'low'
+      return 'normal'
+    }
+
+    const getItemLosses = (item) => {
+      const variance = calculateVariance(item)
+      if (variance < 0) {
+        return Math.abs(variance) * item.price
+      }
+      return 0
+    }
+
     onMounted(() => {
       onAuthStateChanged(auth, (currentUser) => {
         user.value = currentUser
@@ -734,15 +1004,26 @@ export default {
       getCategoryIcon,
       formatPrice,
       exportSummaryReport,
-      isSidebarCollapsed,
       currentView,
-      toggleSidebar,
       setView,
       getLowStockCount,
       getTotalValue,
       getMostStockedCategory,
       getCategoryItemCount,
-      getCategoryValue
+      getCategoryValue,
+      updateTotalStock,
+      getStockDiscrepancy,
+      getTotalLosses,
+      updateUsage,
+      calculateVariance,
+      calculateVariancePercentage,
+      getVarianceClass,
+      getVarianceExplanation,
+      getInventoryStatus,
+      getItemStatus,
+      triggerAudit,
+      suggestRestock,
+      getItemLosses
     }
   }
 }
@@ -761,7 +1042,7 @@ export default {
 .nav-header {
   background-color: #2c3e50;
   color: white;
-  padding: 0.75rem 1.5rem;
+  padding: 0.1rem 1rem;
   position: fixed;
   top: 0;
   right: 0;
@@ -771,7 +1052,7 @@ export default {
 }
 
 .nav-header.nav-shifted {
-  left: 250px;
+  left: 60px;
 }
 
 .nav-content {
@@ -822,10 +1103,9 @@ export default {
 }
 
 .main-container {
-  margin-left: 250px;
+  margin-left: 60px;
   margin-top: 64px; /* Height of nav-header */
   flex: 1;
-  transition: all 0.3s ease;
   min-height: calc(100vh - 64px);
 }
 
@@ -834,46 +1114,32 @@ export default {
 }
 
 .sidebar {
-  width: 250px;
+  width: 60px; /* Fixed width */
   background: #2c3e50;
   color: white;
   height: 100vh;
   position: fixed;
   left: 0;
   top: 0;
-  transition: all 0.3s ease;
   z-index: 1000;
   display: flex;
   flex-direction: column;
 }
 
-.sidebar-collapsed {
-  width: 60px;
+.sidebar-header {
+  padding: 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
-.sidebar-header {
-  padding: 1.5rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+.sidebar-header span {
+  display: none;
 }
 
 .sidebar-header i {
   font-size: 1.5rem;
-}
-
-.collapse-btn {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: white;
-  cursor: pointer;
-  padding: 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.3s ease;
 }
 
 .sidebar-menu {
@@ -883,19 +1149,19 @@ export default {
 }
 
 .menu-item {
-  padding: 1rem 1.5rem;
+  position: relative;
+  padding: 1rem 0;
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 1rem;
   color: #ecf0f1;
   text-decoration: none;
   transition: all 0.3s ease;
   border-left: 3px solid transparent;
 }
 
-.menu-item:hover {
-  background: rgba(255,255,255,0.1);
-  border-left-color: #3498db;
+.menu-item i {
+  font-size: 1.2rem;
 }
 
 .menu-item.active {
@@ -903,10 +1169,28 @@ export default {
   border-left-color: #3498db;
 }
 
-.menu-item i {
-  font-size: 1.2rem;
-  width: 24px;
-  text-align: center;
+.menu-label {
+  position: absolute;
+  left: 100%;
+  background: #2c3e50;
+  padding: 0.5rem 1rem;
+  border-radius: 0 4px 4px 0;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  transform: translateX(-20px);
+  box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+}
+
+.menu-item:hover .menu-label {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+.menu-item.active .menu-label {
+  background: #3498db;
 }
 
 .dashboard-stats {
@@ -1242,46 +1526,32 @@ input {
 }
 
 .sidebar {
-  width: 250px;
+  width: 60px; /* Fixed width */
   background: #2c3e50;
   color: white;
   height: 100vh;
   position: fixed;
   left: 0;
   top: 0;
-  transition: all 0.3s ease;
   z-index: 1000;
   display: flex;
   flex-direction: column;
 }
 
-.sidebar-collapsed {
-  width: 60px;
+.sidebar-header {
+  padding: 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
-.sidebar-header {
-  padding: 1.5rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+.sidebar-header span {
+  display: none;
 }
 
 .sidebar-header i {
   font-size: 1.5rem;
-}
-
-.collapse-btn {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: white;
-  cursor: pointer;
-  padding: 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.3s ease;
 }
 
 .sidebar-menu {
@@ -1291,19 +1561,19 @@ input {
 }
 
 .menu-item {
-  padding: 1rem 1.5rem;
+  position: relative;
+  padding: 1rem 0;
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 1rem;
   color: #ecf0f1;
   text-decoration: none;
   transition: all 0.3s ease;
   border-left: 3px solid transparent;
 }
 
-.menu-item:hover {
-  background: rgba(255,255,255,0.1);
-  border-left-color: #3498db;
+.menu-item i {
+  font-size: 1.2rem;
 }
 
 .menu-item.active {
@@ -1311,193 +1581,222 @@ input {
   border-left-color: #3498db;
 }
 
-.menu-item i {
-  font-size: 1.2rem;
-  width: 24px;
-  text-align: center;
+.menu-label {
+  position: absolute;
+  left: 100%;
+  background: #2c3e50;
+  padding: 0.5rem 1rem;
+  border-radius: 0 4px 4px 0;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  transform: translateX(-20px);
+  box-shadow: 2px 0 5px rgba(0,0,0,0.2);
 }
 
-/* Responsive adjustments */
+.menu-item:hover .menu-label {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+.menu-item.active .menu-label {
+  background: #3498db;
+}
+
+/* Mobile-First Media Queries */
 @media (max-width: 768px) {
-  .form-grid {
-    grid-template-columns: 1fr;
+  /* Layout Adjustments */
+  .inventory-container {
+    flex-direction: column;
   }
-  
-  .dashboard-stats {
-    grid-template-columns: 1fr;
-  }
-  
+
   .nav-header {
-    left: 0;
-    padding: 0.75rem 1rem;
+    height: auto;
+    padding: 0.5rem;
   }
-  
-  .nav-header.nav-shifted {
-    left: 0;
-  }
-  
-  .menu-toggle {
-    display: block;
-  }
-  
+
   .nav-content {
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.5rem;
   }
-  
-  .user-info {
-    flex-direction: column;
-    gap: 1rem;
+
+  .nav-left {
     width: 100%;
+    gap: 1rem;
+    justify-content: space-between;
   }
-  
+
+  .nav-left h1 {
+    font-size: 1.1rem;
+  }
+
+  /* User Info & Actions */
+  .user-info {
+    width: 100%;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
   .nav-actions {
     width: 100%;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
   }
-  
-  .user-details {
-    justify-content: center;
-    width: 100%;
-  }
-  
-  h1 {
-    font-size: 1.2rem;
-  }
-  
+
   .export-btn, .logout-btn {
-    padding: 0.5rem;
+    width: 100%;
+    padding: 0.75rem;
+    justify-content: center;
     font-size: 0.9rem;
   }
-  
-  .sidebar {
-    width: 60px;
+
+  /* Form Controls */
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 0.75rem;
   }
-  
-  .sidebar:hover {
-    width: 250px;
+
+  .form-group input {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
   }
-  
-  .main-container {
-    margin-left: 60px;
+
+  /* Item Cards */
+  .items-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 0.75rem;
   }
-  
-  .sidebar-header span,
-  .menu-item span {
-    display: none;
+
+  .item-card {
+    padding: 1rem;
   }
-  
-  .sidebar:hover .sidebar-header span,
-  .sidebar:hover .menu-item span {
-    display: inline;
+
+  .item-details {
+    gap: 0.75rem;
   }
-  
-  .collapse-btn {
-    display: none;
+
+  /* Quantity & Price Controls */
+  .quantity-control, .price-control {
+    flex-direction: row;
+    width: 100%;
+  }
+
+  .quantity-btn {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .quantity-input, .price-input, .total-stock-input, .usage-input {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
+  }
+
+  /* Stock Status */
+  .stock-status {
+    padding: 0.75rem;
+  }
+
+  .stock-info, .usage-info {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  /* Categories Navigation */
+  .categories-nav {
+    padding: 0.75rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+  }
+
+  .categories-nav::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+
+  .category-btn {
+    white-space: nowrap;
+    padding: 0.75rem 1rem;
+    min-height: 44px;
+  }
+
+  /* Dashboard Stats */
+  .dashboard-stats {
+    grid-template-columns: 1fr;
+    padding: 0.75rem;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Touch Optimizations */
+  .menu-item {
+    min-height: 44px;
+  }
+
+  .menu-label {
+    padding: 0.75rem 1rem;
+  }
+
+  /* Improve Touch Targets */
+  button, 
+  input[type="number"],
+  input[type="text"],
+  select {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  /* Better Spacing for Touch */
+  .item-meta {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+
+  .total-price {
+    text-align: center;
+  }
+
+  /* Loading States */
+  .loading-overlay {
+    position: fixed;
   }
 }
 
-/* Add view-specific styles */
-.quick-summary {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 10px;
-  margin: 1.5rem;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+/* Tablet Optimizations */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .items-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
-}
+/* Touch Device Optimizations */
+@media (hover: none) {
+  .menu-item:active,
+  .button:active {
+    opacity: 0.7;
+  }
 
-.summary-card {
-  background: #f8f9fa;
-  padding: 1rem;
-  border-radius: 8px;
-  text-align: center;
-}
-
-.categories-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-  padding: 1.5rem;
-}
-
-.category-card {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-.category-info {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.category-info i {
-  font-size: 2rem;
-  color: #3498db;
-}
-
-.reports-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
-  padding: 1.5rem;
-}
-
-.report-card {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-.report-btn {
-  background: #3498db;
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border-radius: 5px;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 1rem;
-}
-
-.settings-grid {
-  padding: 1.5rem;
-}
-
-.settings-card {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-.user-settings {
-  margin-top: 1rem;
-}
-
-.settings-btn {
-  background: #e74c3c;
-  color: white;
-  padding: 0.5rem 1rem;
-  border-radius: 5px;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 1rem;
+  .quantity-btn:active,
+  .category-btn:active {
+    transform: scale(0.95);
+  }
 }
 </style> 
