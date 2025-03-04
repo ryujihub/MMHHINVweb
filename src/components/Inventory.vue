@@ -152,11 +152,23 @@
         <!-- Inventory View -->
         <div v-if="currentView === 'inventory'" class="inventory-view">
           <div class="categories-nav">
+            <div class="search-container">
+              <input 
+                v-model="searchQuery" 
+                type="text" 
+                placeholder="Search items..." 
+                class="search-input"
+                @input="filterItems"
+              />
+              <button class="search-btn">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
             <button 
           v-for="category in categories" 
               :key="category.id"
               :class="['category-btn', selectedCategory === category.id ? 'active' : '']"
-              @click="selectCategory(category.id)"
+              @click="handleCategorySelect(category.id)"
             >
               <i :class="getCategoryIcon(category.id)"></i>
               {{ category.name }}
@@ -368,7 +380,7 @@
               </div>
 
               <div class="category-actions">
-                <button class="view-items-btn" @click="selectCategory(category.id); setView('inventory')">
+                <button class="view-items-btn" @click="handleCategorySelect(category.id); setView('inventory')">
                   <i class="fas fa-eye"></i> View Items
                 </button>
               </div>
@@ -386,12 +398,7 @@
                 <i class="fas fa-download"></i> Download Report
               </button>
             </div>
-            <div class="report-card">
-              <h3>Low Stock Report</h3>
-              <button @click="exportLowStockReport" class="report-btn">
-                <i class="fas fa-download"></i> Download Report
-              </button>
-            </div>
+            
           </div>
         </div>
 
@@ -509,7 +516,20 @@ export default {
     const toast = useToast()
 
     const filteredItems = computed(() => {
-      return items.value.filter(item => item.category === selectedCategory.value)
+      const query = currentSearchQuery.value
+      
+      return items.value.filter(item => {
+        const matchesCategory = selectedCategory.value === 'all' || item.category === selectedCategory.value
+        
+        // If no search query, just filter by category
+        if (!query) {
+          return matchesCategory
+        }
+        
+        // Otherwise filter by both category and search
+        const matchesSearch = item.name.toLowerCase().includes(query)
+        return matchesCategory && matchesSearch
+      })
     })
 
     const getCurrentCategoryName = computed(() => {
@@ -641,8 +661,9 @@ export default {
       }
     }
 
-    const selectCategory = (categoryId) => {
+    const handleCategorySelect = (categoryId) => {
       selectedCategory.value = categoryId
+      filterItems() // Apply both category and search filters
     }
 
     const getCategoryIcon = (categoryId) => {
@@ -1105,6 +1126,25 @@ export default {
       })
     })
 
+    // Add this ref
+    const searchQuery = ref('')
+
+    // Add this method
+    const filterItems = () => {
+      // Don't modify the computed property directly
+      // Instead, update the selectedCategory which will trigger the computed property
+      if (!searchQuery.value.trim()) {
+        // No need to do anything, the computed property will handle it
+        return
+      }
+      
+      // Store the search query for use in the computed property
+      currentSearchQuery.value = searchQuery.value.toLowerCase().trim()
+    }
+
+    // Add this ref to store the current search query
+    const currentSearchQuery = ref('')
+
     return {
       user,
       loginForm,
@@ -1121,7 +1161,7 @@ export default {
       updateQuantity,
       updatePrice,
       deleteItem,
-      selectCategory,
+      handleCategorySelect,
       getCategoryIcon,
       formatPrice,
       exportSummaryReport,
@@ -1148,7 +1188,10 @@ export default {
       loginWithGoogle,
       getCategoryLowStockCount,
       showAddItemModal,
-      formatDate
+      formatDate,
+      searchQuery,
+      filterItems,
+      currentSearchQuery
     }
   }
 }
@@ -1167,17 +1210,18 @@ export default {
 .nav-header {
   background-color: #2c3e50;
   color: white;
-  padding: 0.1rem 1rem;
+  padding: 0.5rem;
   position: fixed;
   top: 0;
   right: 0;
-  left: 60px;
+  left: 50px;
   z-index: 999;
   transition: all 0.3s ease;
+  height: 50px; /* Reduced from 64px */
 }
 
 .nav-header.nav-shifted {
-  left: 60px;
+  left: 50px;
 }
 
 .nav-content {
@@ -1228,18 +1272,18 @@ export default {
 }
 
 .main-container {
-  margin-left: 60px;
-  margin-top: 64px; /* Height of nav-header */
+  margin-left: 50px; /* Match sidebar width */
+  margin-top: 50px; /* Match the new header height */
   flex: 1;
-  min-height: calc(100vh - 64px);
+  min-height: calc(100vh - 50px);
 }
 
 .main-container.sidebar-collapsed {
-  margin-left: 60px;
+  margin-left: 50px;
 }
 
 .sidebar {
-  width: 60px; /* Fixed width */
+  width: 50px; /* Reduced from 60px */
   background: #2c3e50;
   color: white;
   height: 100vh;
@@ -1252,7 +1296,7 @@ export default {
 }
 
 .sidebar-header {
-  padding: 1.5rem 0;
+  padding: 1rem 0; /* Reduced padding */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1264,7 +1308,7 @@ export default {
 }
 
 .sidebar-header i {
-  font-size: 1.5rem;
+  font-size: 1rem; /* Smaller icons */
 }
 
 .sidebar-menu {
@@ -1275,7 +1319,7 @@ export default {
 
 .menu-item {
   position: relative;
-  padding: 1rem 0;
+  padding: 0.75rem 0; /* Reduced padding */
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1286,7 +1330,7 @@ export default {
 }
 
 .menu-item i {
-  font-size: 1.2rem;
+  font-size: 1rem; /* Smaller icons */
 }
 
 .menu-item.active {
@@ -1321,13 +1365,13 @@ export default {
 .dashboard-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-  padding: 1.5rem;
+  gap: 1rem;
+  padding: 1rem;
 }
 
 .stat-card {
   background: white;
-  padding: 1.5rem;
+  padding: 1rem;
   border-radius: 10px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   display: flex;
@@ -1336,29 +1380,31 @@ export default {
 }
 
 .stat-card i {
-  font-size: 2rem;
+  font-size: 1.5rem; /* Smaller icons */
   color: #3498db;
 }
 
 .categories-nav {
   display: flex;
   gap: 1rem;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1rem;
   overflow-x: auto;
   background: white;
   border-bottom: 1px solid #eee;
+  align-items: center;
 }
 
 .category-btn {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
+  padding: 0.5rem 1rem;
   border-radius: 20px;
   background: #f8f9fa;
   color: #2c3e50;
   border: 1px solid #dee2e6;
   transition: all 0.3s ease;
+  font-size: 0.9rem;
 }
 
 .category-btn.active {
@@ -1475,7 +1521,7 @@ export default {
 .item-card {
   background: white;
   border-radius: 10px;
-  padding: 1.5rem;
+  padding: 1rem;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
@@ -1499,8 +1545,8 @@ export default {
 .quantity-btn {
   background: #3498db;
   color: white;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -1522,14 +1568,16 @@ export default {
   border-radius: 6px;
   padding: 0.25rem 0.5rem;
   flex: 1;
+  min-width: 100px; /* Add minimum width */
 }
 
 .quantity-input {
-  width: 60px;
+  width: 100%; /* Make input take available space */
+  min-width: 40px; /* Minimum width for input */
   border: none;
   padding: 0.25rem;
   text-align: center;
-  font-size: 1rem;
+  font-size: 0.9rem; /* Smaller font */
   color: #2c3e50;
   -webkit-appearance: none;
   -moz-appearance: textfield;
@@ -1546,10 +1594,11 @@ export default {
 
 .unit {
   color: #6c757d;
-  font-size: 0.9rem;
-  margin-left: 0.5rem;
-  padding-left: 0.5rem;
+  font-size: 0.8rem; /* Smaller font */
+  margin-left: 0.25rem;
+  padding-left: 0.25rem;
   border-left: 1px solid #dee2e6;
+  white-space: nowrap; /* Prevent wrapping */
 }
 
 .category-tag {
@@ -1635,40 +1684,34 @@ export default {
 .price-control {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin: 1rem 0;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
   background: #f8f9fa;
   padding: 0.5rem;
   border-radius: 8px;
 }
 
+.price-control label {
+  min-width: 70px; /* Fixed width for label */
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
 .price-input-wrapper {
-  display: flex;
-  align-items: center;
+  flex: 1;
   background: white;
   border: 1px solid #dee2e6;
   border-radius: 6px;
   padding: 0.25rem 0.5rem;
-  flex: 1;
 }
 
 .price-input {
-  width: 100px;
+  width: 100%;
   border: none;
   padding: 0.25rem;
-  text-align: right;
-  font-size: 1rem;
+  text-align: center;
+  font-size: 0.9rem;
   color: #2c3e50;
-  -webkit-appearance: none;
-  -moz-appearance: textfield;
-  appearance: none;
-}
-
-.price-input::-webkit-outer-spin-button,
-.price-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  appearance: none;
-  margin: 0;
 }
 
 .total-price {
@@ -1711,7 +1754,7 @@ export default {
 }
 
 .sidebar {
-  width: 60px; /* Fixed width */
+  width: 50px; /* Reduced from 60px */
   background: #2c3e50;
   color: white;
   height: 100vh;
@@ -1724,7 +1767,7 @@ export default {
 }
 
 .sidebar-header {
-  padding: 1.5rem 0;
+  padding: 1rem 0; /* Reduced padding */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1736,7 +1779,7 @@ export default {
 }
 
 .sidebar-header i {
-  font-size: 1.5rem;
+  font-size: 1rem; /* Smaller icons */
 }
 
 .sidebar-menu {
@@ -1747,7 +1790,7 @@ export default {
 
 .menu-item {
   position: relative;
-  padding: 1rem 0;
+  padding: 0.75rem 0; /* Reduced padding */
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1758,7 +1801,7 @@ export default {
 }
 
 .menu-item i {
-  font-size: 1.2rem;
+  font-size: 1rem; /* Smaller icons */
 }
 
 .menu-item.active {
@@ -2206,13 +2249,13 @@ export default {
 .quick-summary {
   background: white;
   border-radius: 15px;
-  margin: 1.5rem;
+  margin: 1rem;
   box-shadow: 0 4px 6px rgba(0,0,0,0.07);
   overflow: hidden;
 }
 
 .summary-header {
-  padding: 1.5rem;
+  padding: 1rem;
   background: #f8f9fa;
   border-bottom: 1px solid #eee;
   display: flex;
@@ -2237,8 +2280,8 @@ export default {
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1rem;
-  padding: 1.5rem;
+  gap: 0.75rem;
+  padding: 1rem;
 }
 
 .summary-card {
@@ -2260,13 +2303,13 @@ export default {
 .card-icon {
   background: #e3f2fd;
   color: #1976d2;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
 }
 
 .card-content {
@@ -2276,12 +2319,12 @@ export default {
 .card-content h4 {
   color: #2c3e50;
   margin: 0 0 0.5rem 0;
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 
 .card-content p {
   color: #1a1a1a;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 600;
   margin: 0 0 0.5rem 0;
 }
@@ -2355,15 +2398,16 @@ export default {
 .stock-status {
   background: #f8f9fa;
   border-radius: 12px;
-  padding: 1.25rem;
-  margin: 1rem 0;
+  padding: 1rem;
+  margin: 0.75rem 0;
   border: 1px solid #eee;
 }
 
 .stock-info, .usage-info {
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
   padding: 0.75rem;
   background: white;
   border-radius: 8px;
@@ -2371,41 +2415,47 @@ export default {
 }
 
 .stock-label {
-  min-width: 100px;
+  width: 100%;
   color: #2c3e50;
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
 }
 
 .total-stock-input, .usage-input {
-  flex: 1;
+  width: 100%;
   border: 1px solid #dee2e6;
   border-radius: 6px;
   padding: 0.5rem;
   text-align: center;
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: #2c3e50;
   background: #f8f9fa;
   transition: all 0.3s ease;
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+  appearance: none;
 }
 
-.total-stock-input:focus, .usage-input:focus {
-  outline: none;
-  border-color: #3498db;
-  background: white;
+.total-stock-input::-webkit-outer-spin-button,
+.total-stock-input::-webkit-inner-spin-button,
+.usage-input::-webkit-outer-spin-button,
+.usage-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .variance-info {
-  padding: 1rem;
+  padding: 0.75rem;
   border-radius: 8px;
-  margin-top: 1rem;
+  margin-top: 0.75rem;
   background: white;
 }
 
 .variance-details {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   margin-bottom: 0.5rem;
 }
 
@@ -2415,11 +2465,26 @@ export default {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .variance-value {
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: 1rem;
+  width: 100%;
+}
+
+/* Improve mobile layout */
+@media (min-width: 768px) {
+  .variance-details {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .variance-value {
+    width: auto;
+  }
 }
 
 .variance-explanation {
@@ -2449,8 +2514,8 @@ export default {
 .losses-info {
   background: #fff5f5;
   border-radius: 12px;
-  padding: 1.25rem;
-  margin: 1rem 0;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
   border: 1px solid #ffcdd2;
 }
 
@@ -2506,7 +2571,7 @@ export default {
   }
 
   .total-stock-input, .usage-input {
-    width: 100%;
+    width: 70%;
   }
 
   .variance-info, .losses-info {
@@ -2522,6 +2587,203 @@ export default {
   .losses-value {
     width: 100%;
     text-align: center;
+  }
+}
+
+/* Make inventory interface smaller */
+.items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 0.75rem;
+}
+
+.item-card {
+  padding: 0.75rem;
+  border-radius: 8px;
+}
+
+.item-header {
+  margin-bottom: 0.5rem;
+}
+
+.item-header h4 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.delete-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 0.8rem;
+}
+
+.item-details {
+  gap: 0.5rem;
+}
+
+.quantity-control, .price-control {
+  margin: 0.5rem 0;
+  padding: 0.4rem;
+}
+
+.item-meta {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.category-tag {
+  padding: 0.25rem 0.5rem;
+}
+
+.total-price {
+  font-size: 0.9rem;
+}
+
+/* Make form more compact */
+.form-grid {
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.form-group {
+  margin-bottom: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.form-group input {
+  padding: 0.4rem;
+  font-size: 0.9rem;
+}
+
+/* Reduce main content padding */
+.main-content {
+  padding: 0.75rem;
+  gap: 0.75rem;
+}
+
+.inventory-actions {
+  padding: 0.5rem;
+}
+
+.add-item-trigger {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+/* Make modal more compact */
+.modal-header, .modal-body, .modal-footer {
+  padding: 0.75rem;
+}
+
+.modal-header h3 {
+  font-size: 1.1rem;
+}
+
+.cancel-btn, .add-btn {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+/* Adjust items list header */
+.items-list h3 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Make stock status more compact */
+.stock-status {
+  padding: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.stock-info, .usage-info {
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.variance-info {
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.losses-info {
+  padding: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+/* Adjust mobile view */
+@media (max-width: 768px) {
+  .items-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .main-content {
+    padding: 0.5rem;
+  }
+}
+
+.search-container {
+  display: flex;
+  min-width: 200px;
+  max-width: 300px;
+  position: relative;
+  margin-right: 0.5rem;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  padding-right: 2.5rem;
+  border-radius: 20px;
+  border: 1px solid #dee2e6;
+  font-size: 0.9rem;
+  background: #f8f9fa;
+  transition: all 0.3s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #3498db;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.search-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 40px;
+  border: none;
+  background: transparent;
+  color: #6c757d;
+  border-radius: 0 20px 20px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.search-btn:hover {
+  color: #3498db;
+}
+
+/* Mobile responsive search */
+@media (max-width: 768px) {
+  .categories-nav {
+    flex-wrap: wrap;
+  }
+  
+  .search-container {
+    width: 100%;
+    max-width: none;
+    margin-bottom: 0.5rem;
+    order: -1;
   }
 }
 </style> 
