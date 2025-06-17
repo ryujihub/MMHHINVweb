@@ -1,119 +1,190 @@
 <template>
   <div class="login-container">
-    <form @submit.prevent="handleLogin" class="login-form">
-      <h2>Login</h2>
-      <div class="form-group">
-        <label>Email:</label>
-        <input type="email" v-model="email" required>
+    <div class="login-card">
+      <div class="login-header">
+        <h1>Hardware Inventory</h1>
+        <p>Sign in to access your dashboard</p>
       </div>
-      <div class="form-group">
-        <label>Password:</label>
-        <input type="password" v-model="password" required>
+
+      <div class="login-options">
+        <button 
+          @click="signInWithGoogle" 
+          class="google-btn"
+          :disabled="loading"
+        >
+          <div v-if="loading" class="spinner"></div>
+          <img v-else src="https://www.google.com/favicon.ico" alt="Google" class="google-icon">
+          {{ loading ? 'Signing in...' : 'Sign in with Google' }}
+        </button>
       </div>
-      <button type="submit" :disabled="isLoading">
-        {{ isLoading ? 'Logging in...' : 'Login' }}
-      </button>
-      <p v-if="error" class="error">{{ error }}</p>
-      <p v-if="isLoading" class="loading">Please wait...</p>
-    </form>
+
+      <div v-if="error" class="error-message">
+        {{ error }}
+      </div>
+
+      <div class="login-footer">
+        <p>By signing in, you agree to our Terms of Service and Privacy Policy</p>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
-import { ref } from 'vue';
-import { auth } from '../firebase/config';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useRouter } from 'vue-router';
-
-// Validation rules
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const minPasswordLength = 6;
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { auth } from '../firebase/config'
+import { 
+  GoogleAuthProvider, 
+  signInWithPopup,
+  signInWithRedirect 
+} from 'firebase/auth'
 
 export default {
+  name: 'Login',
   setup() {
-    const email = ref('');
-    const password = ref('');
-    const error = ref(null);
-    const router = useRouter();
-    const isLoading = ref(false);
+    const router = useRouter()
+    const error = ref('')
+    const loading = ref(false)
 
-    const validateInputs = () => {
-      if (!emailRegex.test(email.value)) {
-        error.value = 'Please enter a valid email address';
-        return false;
-      }
-      if (password.value.length < minPasswordLength) {
-        error.value = 'Password must be at least 6 characters';
-        return false;
-      }
-      return true;
-    };
-
-    const handleLogin = async () => {
-      error.value = null;
-      if (!validateInputs()) return;
-
-      isLoading.value = true;
+    const signInWithGoogle = async () => {
       try {
-        await signInWithEmailAndPassword(auth, email.value, password.value);
-        console.log('User logged in successfully');
-        router.push('/inventory');
-      } catch (err) {
-        console.error('Login error:', err.code, err.message);
-        error.value = `Login failed: ${err.message}`;
-      } finally {
-        isLoading.value = false;
-      }
-    };
+        loading.value = true
+        error.value = ''
+        
+        const provider = new GoogleAuthProvider()
+        // Add additional scopes if needed
+        provider.addScope('profile')
+        provider.addScope('email')
+        
+        // Try popup first, fallback to redirect if popup is blocked
+        try {
+          await signInWithPopup(auth, provider)
+        } catch (popupError) {
+          if (popupError.code === 'auth/popup-blocked') {
+            await signInWithRedirect(auth, provider)
+          } else {
+            throw popupError
+          }
+        }
 
-    return { email, password, error, isLoading, handleLogin };
+        // Redirect to dashboard on successful login
+        router.push('/')
+      } catch (err) {
+        console.error('Login error:', err)
+        error.value = 'Failed to sign in with Google. Please try again.'
+      } finally {
+        loading.value = false
+      }
+    }
+
+    return {
+      signInWithGoogle,
+      error,
+      loading
+    }
   }
 }
 </script>
 
 <style scoped>
 .login-container {
+  min-height: 100vh;
   display: flex;
-  justify-content: center;
   align-items: center;
-  height: 100vh;
-}
-
-.login-form {
-  width: 300px;
+  justify-content: center;
+  background: #f5f6fa;
   padding: 20px;
-  border: 1px solid #ccc;
+}
+
+.login-card {
+  background: white;
+  padding: 40px;
   border-radius: 8px;
-}
-
-.form-group {
-  margin-bottom: 15px;
-}
-
-input {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   width: 100%;
-  padding: 8px;
-  margin-top: 5px;
+  max-width: 400px;
+  text-align: center;
 }
 
-button {
-  width: 100%;
-  padding: 10px;
-  background-color: #4CAF50;
-  color: white;
-  border: none;
+.login-header {
+  margin-bottom: 30px;
+}
+
+.login-header h1 {
+  color: #2c3e50;
+  margin-bottom: 10px;
+}
+
+.login-header p {
+  color: #666;
+}
+
+.login-options {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: white;
+  border: 1px solid #ddd;
+  padding: 12px 20px;
   border-radius: 4px;
   cursor: pointer;
+  font-size: 16px;
+  color: #333;
+  transition: all 0.3s;
+  min-width: 200px;
 }
 
-.error {
-  color: red;
-  margin-top: 10px;
+.google-btn:hover:not(:disabled) {
+  background: #f8f9fa;
+  border-color: #ccc;
 }
 
-.loading {
-  color: #4CAF50;
-  margin-top: 10px;
-  font-style: italic;
+.google-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
-</style>
+
+.google-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error-message {
+  color: #dc3545;
+  margin: 15px 0;
+  font-size: 14px;
+}
+
+.login-footer {
+  margin-top: 30px;
+  font-size: 12px;
+  color: #666;
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 20px;
+  }
+}
+</style> 
