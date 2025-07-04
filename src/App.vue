@@ -27,11 +27,6 @@
 
     <main class="main-content">
       <header class="top-bar">
-        <div class="search-bar">
-          <input type="text" placeholder="Search..." v-model="searchQuery">
-          <i class="fas fa-search"></i>
-        </div>
-        
         <div class="user-menu">
           <button class="notifications-btn">
             <i class="fas fa-bell"></i>
@@ -82,7 +77,6 @@ export default {
   name: 'App',
   setup() {
     const router = useRouter()
-    const searchQuery = ref('')
     const unreadNotifications = ref(3)
     const username = ref('')
     const userAvatar = ref('')
@@ -128,7 +122,6 @@ export default {
     })
 
     return {
-      searchQuery,
       unreadNotifications,
       username,
       userAvatar,
@@ -222,7 +215,7 @@ body {
   background: white;
   padding: 15px 30px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
@@ -419,10 +412,11 @@ body {
 
   .top-bar {
     padding: 10px;
+    justify-content: flex-end;
   }
 
-  .search-bar {
-    width: 200px;
+  .user-menu {
+    gap: 10px;
   }
 
   .content {

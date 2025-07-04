@@ -55,7 +55,7 @@
       </table>
     </div>
 
-    <div class="recent-sales">
+    <div class="recent-sales" style="overflow-x: auto;">
       <h3>Recent Sales</h3>
       <table>
         <thead>

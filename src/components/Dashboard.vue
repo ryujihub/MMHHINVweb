@@ -63,7 +63,25 @@
 
       <div class="critical-stock">
         <h3>Critical Stock Alerts</h3>
-        <table>
+        <div v-if="isMobileView" class="critical-stock-grid">
+          <div v-for="item in criticalStockItems" :key="item.id" class="critical-stock-card">
+            <div><strong>Item Name:</strong> {{ item.name }}</div>
+            <div><strong>Current Stock:</strong> {{ item.currentStock }}</div>
+            <div><strong>Minimum Stock:</strong> {{ item.minimumStock }}</div>
+            <div>
+              <strong>Status:</strong>
+              <span class="status-badge" :class="getStockStatus(item)">
+                {{ getStockStatus(item) }}
+              </span>
+            </div>
+            <div>
+              <button class="action-btn" @click="reorderItem(item)">
+                Reorder
+              </button>
+            </div>
+          </div>
+        </div>
+        <table v-else>
           <thead>
             <tr>
               <th>Item Name</th>
@@ -461,6 +479,11 @@ th, td {
 }
 
 @media (max-width: 768px) {
+  .dashboard {
+    transform: scale(0.85);
+    transform-origin: top center;
+  }
+
   .dashboard-header {
     flex-direction: column;
     gap: 10px;
@@ -472,6 +495,10 @@ th, td {
 
   .chart-card {
     height: 250px;
+  }
+
+  .critical-stock {
+    overflow-x: auto;
   }
 }
 
