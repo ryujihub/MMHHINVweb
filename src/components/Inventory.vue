@@ -178,6 +178,26 @@ export default {
       items.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
     })
 
+    // Listen to Firestore stockMovements collection for real-time stock in/out
+    onSnapshot(collection(db, 'stockMovements'), async (snapshot) => {
+      const movements = snapshot.docs.map(doc => doc.data())
+      for (const mv of movements) {
+        const item = items.value.find(i => i.productCode === mv.productCode)
+        if (item) {
+          let newStock = item.currentStock
+          if (mv.type === 'out') {
+            newStock = item.currentStock - mv.quantity
+          } else {
+            newStock = item.currentStock + mv.quantity
+          }
+          // Only update if stock is different
+          if (newStock !== item.currentStock) {
+            await updateDoc(doc(db, 'inventory', item.id), { currentStock: newStock })
+          }
+        }
+      }
+    })
+
     const filteredItems = computed(() => {
       return items.value.filter(item => {
         const matchesSearch = item.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
